@@ -208,122 +208,132 @@ echo -e "${GREEN}✅ Dossier créé : $OUTPUT_DIR${NC}"
 # ============================================================================
 # RÉCAP FINAL — Commandes prêtes à copier
 # ============================================================================
+echo ""
+echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+echo -e "${GREEN}  🎉 Session MFA active — Prête pour l'audit${NC}"
+echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+echo ""
+echo -e "${CYAN}⏰ Session valide jusqu'à : ${GREEN}$EXP${NC}"
+echo -e "${CYAN}📁 Dossier d'audit         : ${GREEN}$OUTPUT_DIR${NC}"
+echo ""
+echo -e "${CYAN}📌 Activer le profil dans ton shell :${NC}"
+echo -e "   ${YELLOW}export AWS_PROFILE=$TARGET_PROFILE${NC}"
+echo -e "   ${YELLOW}export AWS_REGION=$REGION${NC}"
+echo ""
+echo -e "${MAGENTA}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+echo -e "${MAGENTA}🦊 CLOUDFOX — Énumération offensive (fast, focus pentest)${NC}"
+echo -e "${MAGENTA}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 cat <<EOF
 
-${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}
-${GREEN}  🎉 Session MFA active — Prête pour l'audit${NC}
-${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}
-
-${CYAN}⏰ Session valide jusqu'à : ${GREEN}$EXP${NC}
-${CYAN}📁 Dossier d'audit         : ${GREEN}$OUTPUT_DIR${NC}
-
-${CYAN}📌 Activer le profil dans ton shell :${NC}
-   ${YELLOW}export AWS_PROFILE=$TARGET_PROFILE${NC}
-   ${YELLOW}export AWS_REGION=$REGION${NC}
-
-${MAGENTA}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}
-${MAGENTA}🦊 CLOUDFOX — Énumération offensive (fast, focus pentest)${NC}
-${MAGENTA}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}
-
    # Sanity check
-   ${YELLOW}cloudfox aws -p $TARGET_PROFILE whoami${NC}
+   cloudfox aws -p $TARGET_PROFILE whoami
 
    # Scan complet (tous modules)
-   ${YELLOW}cloudfox aws -p $TARGET_PROFILE all-checks \\
-     --outdir $OUTPUT_DIR/cloudfox${NC}
+   cloudfox aws -p $TARGET_PROFILE all-checks \\
+     --outdir $OUTPUT_DIR/cloudfox
 
    # Modules ciblés utiles en pentest
-   ${YELLOW}cloudfox aws -p $TARGET_PROFILE inventory${NC}        # vue d'ensemble
-   ${YELLOW}cloudfox aws -p $TARGET_PROFILE permissions${NC}      # qui peut quoi
-   ${YELLOW}cloudfox aws -p $TARGET_PROFILE iam-simulator${NC}    # privesc paths
-   ${YELLOW}cloudfox aws -p $TARGET_PROFILE secrets${NC}          # secrets exposés
-   ${YELLOW}cloudfox aws -p $TARGET_PROFILE buckets${NC}          # S3 publics
-   ${YELLOW}cloudfox aws -p $TARGET_PROFILE endpoints${NC}        # URLs accessibles
-   ${YELLOW}cloudfox aws -p $TARGET_PROFILE route53${NC}          # DNS / sous-domaines
-   ${YELLOW}cloudfox aws -p $TARGET_PROFILE pmapper${NC}          # graph privesc
+   cloudfox aws -p $TARGET_PROFILE inventory        # vue d'ensemble
+   cloudfox aws -p $TARGET_PROFILE permissions      # qui peut quoi
+   cloudfox aws -p $TARGET_PROFILE iam-simulator    # privesc paths
+   cloudfox aws -p $TARGET_PROFILE secrets          # secrets exposés
+   cloudfox aws -p $TARGET_PROFILE buckets          # S3 publics
+   cloudfox aws -p $TARGET_PROFILE endpoints        # URLs accessibles
+   cloudfox aws -p $TARGET_PROFILE route53          # DNS / sous-domaines
+   cloudfox aws -p $TARGET_PROFILE pmapper          # graph privesc
 
-${MAGENTA}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}
-${MAGENTA}🛡️  PROWLER — Audit compliance (CIS, NIST, PCI, HIPAA, ISO)${NC}
-${MAGENTA}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}
+EOF
+
+echo -e "${MAGENTA}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+echo -e "${MAGENTA}🛡️  PROWLER — Audit compliance (CIS, NIST, PCI, HIPAA, ISO)${NC}"
+echo -e "${MAGENTA}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+cat <<EOF
 
    # Scan complet (long mais exhaustif)
-   ${YELLOW}prowler aws \\
+   prowler aws \\
      --profile $TARGET_PROFILE \\
      --output-directory $OUTPUT_DIR/prowler \\
-     --output-formats html json-asff csv${NC}
+     --output-formats html json-asff csv
 
    # Régions spécifiques (plus rapide)
-   ${YELLOW}prowler aws -p $TARGET_PROFILE \\
+   prowler aws -p $TARGET_PROFILE \\
      -f $REGION us-east-1 \\
-     -o $OUTPUT_DIR/prowler${NC}
+     -o $OUTPUT_DIR/prowler
 
    # Compliance CIS uniquement
-   ${YELLOW}prowler aws -p $TARGET_PROFILE \\
+   prowler aws -p $TARGET_PROFILE \\
      --compliance cis_2.0_aws \\
-     -o $OUTPUT_DIR/prowler${NC}
+     -o $OUTPUT_DIR/prowler
 
    # Sévérité critique + haute uniquement
-   ${YELLOW}prowler aws -p $TARGET_PROFILE \\
+   prowler aws -p $TARGET_PROFILE \\
      --severity critical high \\
-     -o $OUTPUT_DIR/prowler${NC}
+     -o $OUTPUT_DIR/prowler
 
    # Services ciblés (rapide pour pentest)
-   ${YELLOW}prowler aws -p $TARGET_PROFILE \\
+   prowler aws -p $TARGET_PROFILE \\
      --services iam s3 ec2 rds lambda \\
-     -o $OUTPUT_DIR/prowler${NC}
+     -o $OUTPUT_DIR/prowler
 
    # Checks spécifiques privesc / exposition
-   ${YELLOW}prowler aws -p $TARGET_PROFILE \\
+   prowler aws -p $TARGET_PROFILE \\
      --checks iam_user_mfa_enabled_console_access \\
               s3_bucket_public_access \\
               ec2_instance_public_ip \\
               iam_policy_allows_privilege_escalation \\
-     -o $OUTPUT_DIR/prowler${NC}
+     -o $OUTPUT_DIR/prowler
 
    # Liste tous les checks dispo
-   ${YELLOW}prowler aws --list-checks${NC}
-
-${MAGENTA}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}
-${MAGENTA}🔍 SCOUTSUITE — Rapport HTML interactif global${NC}
-${MAGENTA}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}
-
-   # Scan AWS complet
-   ${YELLOW}scout aws \\
-     --profile $TARGET_PROFILE \\
-     --report-dir $OUTPUT_DIR/scoutsuite${NC}
-
-   # Régions ciblées (plus rapide)
-   ${YELLOW}scout aws -p $TARGET_PROFILE \\
-     --regions $REGION us-east-1 \\
-     --report-dir $OUTPUT_DIR/scoutsuite${NC}
-
-   # Services ciblés
-   ${YELLOW}scout aws -p $TARGET_PROFILE \\
-     --services iam s3 ec2 \\
-     --report-dir $OUTPUT_DIR/scoutsuite${NC}
-
-   # Sans tenter d'ouvrir le navigateur
-   ${YELLOW}scout aws -p $TARGET_PROFILE \\
-     --report-dir $OUTPUT_DIR/scoutsuite \\
-     --no-browser${NC}
-
-   # Ouvrir le rapport ensuite
-   ${YELLOW}open $OUTPUT_DIR/scoutsuite/scoutsuite-report/*.html${NC}
-
-${MAGENTA}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}
-${MAGENTA}🚀 PIPELINE COMPLET — Tout lancer en parallèle${NC}
-${MAGENTA}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}
-
-   ${YELLOW}export AWS_PROFILE=$TARGET_PROFILE${NC}
-
-   ${YELLOW}(cloudfox aws all-checks --outdir $OUTPUT_DIR/cloudfox > $OUTPUT_DIR/cloudfox.log 2>&1) &${NC}
-   ${YELLOW}(prowler aws -o $OUTPUT_DIR/prowler --severity critical high > $OUTPUT_DIR/prowler.log 2>&1) &${NC}
-   ${YELLOW}(scout aws --report-dir $OUTPUT_DIR/scoutsuite --no-browser > $OUTPUT_DIR/scout.log 2>&1) &${NC}
-   ${YELLOW}wait${NC}
-   ${YELLOW}echo "✅ Tous les scans terminés → $OUTPUT_DIR"${NC}
-
-${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}
-${CYAN}🔁 Pour renouveler la session MFA : relance ce script${NC}
-${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}
+   prowler aws --list-checks
 
 EOF
+
+echo -e "${MAGENTA}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+echo -e "${MAGENTA}🔍 SCOUTSUITE — Rapport HTML interactif global${NC}"
+echo -e "${MAGENTA}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+cat <<EOF
+
+   # Scan AWS complet
+   scout aws \\
+     --profile $TARGET_PROFILE \\
+     --report-dir $OUTPUT_DIR/scoutsuite
+
+   # Régions ciblées (plus rapide)
+   scout aws -p $TARGET_PROFILE \\
+     --regions $REGION us-east-1 \\
+     --report-dir $OUTPUT_DIR/scoutsuite
+
+   # Services ciblés
+   scout aws -p $TARGET_PROFILE \\
+     --services iam s3 ec2 \\
+     --report-dir $OUTPUT_DIR/scoutsuite
+
+   # Sans tenter d'ouvrir le navigateur
+   scout aws -p $TARGET_PROFILE \\
+     --report-dir $OUTPUT_DIR/scoutsuite \\
+     --no-browser
+
+   # Ouvrir le rapport ensuite
+   open $OUTPUT_DIR/scoutsuite/scoutsuite-report/*.html
+
+EOF
+
+echo -e "${MAGENTA}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+echo -e "${MAGENTA}🚀 PIPELINE COMPLET — Tout lancer en parallèle${NC}"
+echo -e "${MAGENTA}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+cat <<EOF
+
+   export AWS_PROFILE=$TARGET_PROFILE
+
+   (cloudfox aws all-checks --outdir $OUTPUT_DIR/cloudfox > $OUTPUT_DIR/cloudfox.log 2>&1) &
+   (prowler aws -o $OUTPUT_DIR/prowler --severity critical high > $OUTPUT_DIR/prowler.log 2>&1) &
+   (scout aws --report-dir $OUTPUT_DIR/scoutsuite --no-browser > $OUTPUT_DIR/scout.log 2>&1) &
+   wait
+   echo "✅ Tous les scans terminés → $OUTPUT_DIR"
+
+EOF
+
+echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+echo -e "${CYAN}🔁 Pour renouveler la session MFA : relance ce script${NC}"
+echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+echo ""
