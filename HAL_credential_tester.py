@@ -2,12 +2,14 @@
 """
 Script qui parse un fichier .nmap, identifie les services JBoss WildFly
 (HAL Management Console) et teste les credentials par défaut.
+Peut aussi prendre une cible directe via -i/-p ou -u.
 """
 
 import re
 import sys
 import argparse
 import requests
+from urllib.parse import urlparse
 from requests.auth import HTTPDigestAuth, HTTPBasicAuth
 from urllib3.exceptions import InsecureRequestWarning
 
@@ -48,7 +50,6 @@ def parse_nmap_file(filename):
     pour les services JBoss WildFly identifiés.
     """
     targets = []
-    current_host = None
 
     with open(filename, "r", encoding="utf-8", errors="ignore") as f:
         content = f.read()
@@ -70,7 +71,6 @@ def parse_nmap_file(filename):
         current_port = None
         current_scheme = "http"
         is_jboss = False
-        port_buffer = {}
 
         for i, line in enumerate(lines):
             # Détection ligne de port
@@ -97,6 +97,31 @@ def parse_nmap_file(filename):
             targets.append((host, current_port, current_scheme))
 
     return targets
+
+
+def parse_url(url):
+    """
+    Parse une URL de type http://host(:port) ou https://host(:port)
+    et retourne un tuple (host, port, scheme).
+    """
+    # Ajoute un scheme par défaut si absent
+    if "://" not in url:
+        url = "http://" + url
+
+    parsed = urlparse(url)
+    scheme = parsed.scheme if parsed.scheme in ("http", "https") else "http"
+    host = parsed.hostname
+
+    if not host:
+        raise ValueError(f"URL invalide: {url}")
+
+    # Détermine le port
+    if parsed.port:
+        port = parsed.port
+    else:
+        port = 8443 if scheme == "https" else 8080
+
+    return (host, port, scheme)
 
 
 def test_credentials(host, port, scheme):
@@ -144,7 +169,7 @@ def test_credentials(host, port, scheme):
                     print(f"    [!!!] SUCCÈS: {user}:{pwd} ({auth_type}) - HTTP {r.status_code}")
                     found.append((user, pwd, auth_type))
                     break  # Pas besoin de tester l'autre auth
-            except requests.RequestException as e:
+            except requests.RequestException:
                 pass
 
     if not found:
@@ -155,22 +180,50 @@ def test_credentials(host, port, scheme):
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Teste les credentials par défaut sur les services JBoss WildFly identifiés par Nmap"
+        description="Teste les credentials par défaut sur les services JBoss WildFly "
+                    "(via fichier Nmap, IP/port ou URL)"
     )
-    parser.add_argument("nmap_file", help="Fichier .nmap à analyser")
+    parser.add_argument("nmap_file", nargs="?", help="Fichier .nmap à analyser")
+    parser.add_argument("-i", "--ip", help="Adresse IP / hostname de la cible")
+    parser.add_argument("-p", "--port", type=int, help="Port de la cible (avec -i)")
+    parser.add_argument("-u", "--url", help="URL de la cible: http://url(:port) ou https://url(:port)")
     parser.add_argument("-o", "--output", help="Fichier de sortie pour les credentials trouvés")
     args = parser.parse_args()
 
-    print(f"[*] Parsing de {args.nmap_file}...")
-    targets = parse_nmap_file(args.nmap_file)
+    targets = []
 
-    if not targets:
-        print("[-] Aucun service JBoss WildFly trouvé dans le fichier nmap")
-        sys.exit(0)
+    # --- Mode URL ---
+    if args.url:
+        try:
+            host, port, scheme = parse_url(args.url)
+            targets.append((host, port, scheme))
+            print(f"[+] Cible (URL): {scheme}://{host}:{port}")
+        except ValueError as e:
+            print(f"[-] {e}")
+            sys.exit(1)
 
-    print(f"[+] {len(targets)} service(s) JBoss WildFly identifié(s):")
-    for host, port, scheme in targets:
-        print(f"    - {scheme}://{host}:{port}")
+    # --- Mode IP/Port ---
+    elif args.ip:
+        port = args.port if args.port else 8080
+        scheme = "https" if port in (8443, 9443, 443) else "http"
+        targets.append((args.ip, port, scheme))
+        print(f"[+] Cible (IP): {scheme}://{args.ip}:{port}")
+
+    # --- Mode fichier Nmap ---
+    elif args.nmap_file:
+        print(f"[*] Parsing de {args.nmap_file}...")
+        targets = parse_nmap_file(args.nmap_file)
+
+        if not targets:
+            print("[-] Aucun service JBoss WildFly trouvé dans le fichier nmap")
+            sys.exit(0)
+
+        print(f"[+] {len(targets)} service(s) JBoss WildFly identifié(s):")
+        for host, port, scheme in targets:
+            print(f"    - {scheme}://{host}:{port}")
+
+    else:
+        parser.error("Vous devez fournir un fichier .nmap, ou -i (avec -p), ou -u")
 
     results = []
     for host, port, scheme in targets:
