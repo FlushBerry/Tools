@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CORS Client — URL2 → URL1</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: system-ui, sans-serif; background: #0f172a; color: #e2e8f0; padding: 2rem 1rem; }
+    .container { max-width: 900px; margin: 0 auto; }
+    h1 { font-size: 1.5rem; margin-bottom: 1rem; }
+    .card { background: #1e293b; border: 1px solid #334155; border-radius: 12px; padding: 1.5rem; margin-bottom: 1.25rem; }
+    .controls { display: flex; gap: 0.75rem; flex-wrap: wrap; }
+    input { flex: 1; min-width: 240px; padding: 0.625rem; background: #0f172a; border: 1px solid #334155; border-radius: 8px; color: #e2e8f0; font-family: monospace; }
+    button { padding: 0.625rem 1.25rem; border: none; border-radius: 8px; font-weight: 600; cursor: pointer; }
+    .btn-primary { background: #3b82f6; color: #fff; }
+    .btn-ghost { background: transparent; color: #94a3b8; border: 1px solid #334155; }
+    .label { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.08em; color: #64748b; margin-bottom: 0.75rem; }
+    .badge { display: inline-block; padding: 0.3rem 0.75rem; border-radius: 999px; font-weight: 700; font-family: monospace; }
+    .s2 { background: #052e16; color: #4ade80; }
+    .s3 { background: #422006; color: #fbbf24; }
+    .s4, .s5 { background: #450a0a; color: #f87171; }
+    pre { background: #0f172a; border: 1px solid #334155; border-radius: 8px; padding: 1rem; overflow: auto; max-height: 400px; font-size: 0.82rem; white-space: pre-wrap; word-break: break-word; }
+    .cookie { background: #0f172a; border: 1px solid #334155; border-radius: 8px; padding: 0.75rem; font-family: monospace; font-size: 0.82rem; word-break: break-all; }
+    .error { background: #450a0a; border: 1px solid #7f1d1d; border-radius: 8px; padding: 1rem; color: #fca5a5; }
+    #results { display: none; }
+  </style>
+</head>
+<body>
+<div class="container">
+  <h1>🔗 CORS Client — URL2.local</h1>
+
+  <div class="card">
+    <div class="label">Requête cible</div>
+    <div class="controls">
+      <input type="url" id="targetUrl" value="http://url1.local/" spellcheck="false" autocomplete="off">
+      <button class="btn-primary" id="sendBtn">Envoyer GET</button>
+      <button class="btn-ghost" id="clearBtn">Effacer</button>
+    </div>
+  </div>
+
+  <div id="results">
+    <div class="card"><div class="label">Statut HTTP</div><div id="statusBadge" class="badge"></div></div>
+    <div class="card"><div class="label">Corps de la réponse</div><pre id="bodyContainer"></pre></div>
+    <div class="card"><div class="label">Cookies de cette page (URL2.local)</div><div id="cookieContainer" class="cookie"></div></div>
+  </div>
+
+  <div id="errorContainer"></div>
+</div>
+
+<script>
+(function () {
+  const $ = id => document.getElementById(id);
+  const targetInput = $('targetUrl'), sendBtn = $('sendBtn'), clearBtn = $('clearBtn');
+  const results = $('results'), statusBadge = $('statusBadge'), bodyEl = $('bodyContainer'),
+        cookieEl = $('cookieContainer'), errorEl = $('errorContainer');
+
+  function clear() {
+    results.style.display = 'none';
+    errorEl.innerHTML = '';
+    statusBadge.textContent = '';
+    bodyEl.textContent = '';
+    cookieEl.textContent = '';
+  }
+
+  function statusClass(c) {
+    return c < 300 ? 's2' : c < 400 ? 's3' : c < 500 ? 's4' : 's5';
+  }
+
+  function pretty(txt) {
+    try { return JSON.stringify(JSON.parse(txt), null, 2); } catch { return txt; }
+  }
+
+  sendBtn.addEventListener('click', async () => {
+    const url = targetInput.value.trim();
+    if (!url) return;
+    clear();
+    sendBtn.disabled = true;
+    sendBtn.textContent = 'Chargement…';
+
+    try {
+      const res = await fetch(url, {
+        method: 'GET',
+        credentials: 'include'   // ← envoie automatiquement les cookies vers le domaine cible
+      });
+
+      results.style.display = 'block';
+      statusBadge.className = 'badge ' + statusClass(res.status);
+      statusBadge.textContent = res.status + ' ' + res.statusText;
+      bodyEl.textContent = pretty(await res.text());
+      cookieEl.textContent = document.cookie || '(aucun cookie pour cette page)';
+    } catch (err) {
+      results.style.display = 'none';
+      errorEl.innerHTML = '<div class="error"><strong>Erreur :</strong> ' +
+        (err.message || err) +
+        '<br><small>Vérifiez que la cible est accessible et configure CORS (Access-Control-Allow-Origin + Access-Control-Allow-Credentials: true).</small></div>';
+    } finally {
+      sendBtn.disabled = false;
+      sendBtn.textContent = 'Envoyer GET';
+    }
+  });
+
+  clearBtn.addEventListener('click', clear);
+})();
+</script>
+</body>
+</html>
