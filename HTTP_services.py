@@ -1,16 +1,18 @@
 #!/usr/bin/env python3
 """
-Analyse un fichier .nmap pour identifier les services HTTP (non-HTTPS)
-exposant une authentification ou un service sensible.
+Analyse un fichier .nmap OU une cible directe (-i/-p ou -u) pour identifier
+les services HTTP (non-HTTPS) exposant une authentification ou un service sensible.
 Aucune dépendance externe (stdlib uniquement).
 """
 
 import sys
 import re
 import socket
+import argparse
 import urllib.request
 import urllib.error
 from datetime import datetime
+from urllib.parse import urlparse
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 LOG_FILE = "http_test.txt"
@@ -94,6 +96,23 @@ def parse_nmap(path):
     return targets
 
 
+def parse_url_target(url):
+    """
+    Parse une URL du type http://host(:port) et retourne (host, port).
+    Si aucun schéma n'est fourni, http:// est supposé.
+    """
+    if "://" not in url:
+        url = "http://" + url
+    parsed = urlparse(url)
+    host = parsed.hostname
+    if not host:
+        raise ValueError(f"URL invalide: {url}")
+    port = parsed.port
+    if port is None:
+        port = 443 if parsed.scheme == "https" else 80
+    return host, port
+
+
 def fetch(host, port):
     url = f"http://{host}:{port}/"
     try:
@@ -168,27 +187,74 @@ def severity_rank(findings):
     return max((order.get(s, 0) for s, _ in findings), default=0)
 
 
+def build_parser():
+    p = argparse.ArgumentParser(
+        description="Analyse HTTP de services sensibles depuis un .nmap ou une cible directe.",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""Exemples:
+  %(prog)s scan.nmap
+  %(prog)s -f scan.nmap
+  %(prog)s -i 192.168.1.10 -p 8080
+  %(prog)s -u http://192.168.1.10:8080
+  %(prog)s -u example.com
+""",
+    )
+    p.add_argument("nmap_file", nargs="?", help="Fichier .nmap (mode positionnel)")
+    p.add_argument("-f", "--file", help="Fichier .nmap")
+    p.add_argument("-i", "--ip", help="Adresse IP / hôte cible (à combiner avec -p)")
+    p.add_argument("-p", "--port", type=int, help="Port cible (à combiner avec -i)")
+    p.add_argument("-u", "--url", help="URL cible: http://host(:port)")
+    return p
+
+
+def resolve_targets(args):
+    """
+    Retourne (targets, source_label).
+    targets : liste de (host, port).
+    """
+    # Priorité : -u > -i/-p > fichier
+    if args.url:
+        host, port = parse_url_target(args.url)
+        return [(host, port)], f"URL directe: {args.url}"
+
+    if args.ip or args.port:
+        if not args.ip or not args.port:
+            raise ValueError("-i et -p doivent être utilisés ensemble.")
+        return [(args.ip, args.port)], f"Cible directe: {args.ip}:{args.port}"
+
+    nmap_file = args.file or args.nmap_file
+    if nmap_file:
+        return parse_nmap(nmap_file), f"Fichier nmap: {nmap_file}"
+
+    raise ValueError("Aucune cible fournie.")
+
+
 def main():
-    if len(sys.argv) < 2:
-        print(f"Usage: {sys.argv[0]} <fichier.nmap>")
+    parser = build_parser()
+    args = parser.parse_args()
+
+    try:
+        targets, source_label = resolve_targets(args)
+    except ValueError as e:
+        parser.print_usage()
+        print(f"\nErreur: {e}")
         sys.exit(1)
 
-    nmap_file = sys.argv[1]
     fh = open(LOG_FILE, "w")
 
     log("=" * 60, fh)
     log(f"Date: {datetime.now()}", fh)
-    log(f"Fichier nmap: {nmap_file}", fh)
+    log(f"Source: {source_label}", fh)
     log("=" * 60, fh)
 
-    log("\n[ETAPE 1] Extraction des host:port HTTP...", fh)
-    targets = parse_nmap(nmap_file)
-    log(f"  -> {len(targets)} cibles trouvées", fh)
+    log("\n[ETAPE 1] Cibles HTTP à analyser...", fh)
+    log(f"  -> {len(targets)} cibles", fh)
     for h, p in targets:
         log(f"   - {h}:{p}", fh)
 
     if not targets:
         log("Aucune cible. Fin.", fh)
+        fh.close()
         return
 
     log("\n[ETAPE 2] Analyse HTTP (parallèle)...", fh)
