@@ -3,6 +3,9 @@
 Script qui parse un fichier .nmap, identifie les services JBoss WildFly
 (HAL Management Console) et teste les credentials par défaut.
 Peut aussi prendre une cible directe via -i/-p ou -u.
+
+Vérifie réellement l'authentification via l'API management (opération
+read-resource) pour éviter les faux positifs sur les redirections 302.
 """
 
 import re
@@ -42,6 +45,10 @@ MGMT_PATHS = [
     "/console",
     "/console/index.html",
 ]
+
+# Endpoint API qui retourne du JSON protégé (management model)
+# On l'utilise pour VÉRIFIER une auth réussie de façon fiable.
+MGMT_API_ENDPOINT = "/management"
 
 
 def parse_nmap_file(filename):
@@ -85,11 +92,14 @@ def parse_nmap_file(filename):
                 current_scheme = "https" if "ssl" in service or "https" in service else "http"
                 is_jboss = False
 
-            # Détection des marqueurs JBoss/WildFly
+            # Détection des marqueurs JBoss/WildFly (détection élargie)
             if current_port:
-                if "JBoss WildFly" in line or "HAL Management Console" in line:
+                line_lower = line.lower()
+                if ("jboss" in line_lower or "wildfly" in line_lower
+                        or "hal management console" in line_lower
+                        or "undertow" in line_lower):
                     is_jboss = True
-                if "ssl" in line.lower() and "http" in line.lower():
+                if "ssl" in line_lower and "http" in line_lower:
                     current_scheme = "https"
 
         # Dernier port du bloc
@@ -101,79 +111,149 @@ def parse_nmap_file(filename):
 
 def parse_url(url):
     """
-    Parse une URL de type http://host(:port) ou https://host(:port)
-    et retourne un tuple (host, port, scheme).
+    Parse une URL (http://url(:port)) et retourne (host, port, scheme).
+    Gère les URLs avec ou sans scheme et port.
     """
-    # Ajoute un scheme par défaut si absent
     if "://" not in url:
         url = "http://" + url
 
     parsed = urlparse(url)
     scheme = parsed.scheme if parsed.scheme in ("http", "https") else "http"
     host = parsed.hostname
+    port = parsed.port
 
     if not host:
         raise ValueError(f"URL invalide: {url}")
 
-    # Détermine le port
-    if parsed.port:
-        port = parsed.port
-    else:
+    if port is None:
         port = 8443 if scheme == "https" else 8080
 
-    return (host, port, scheme)
+    return host, port, scheme
+
+
+def _looks_like_login_redirect(response):
+    """
+    Détermine si une réponse 3xx est en réalité une redirection
+    vers une page de login (donc NON authentifié).
+    """
+    if response.status_code not in (301, 302, 303, 307, 308):
+        return False
+    location = response.headers.get("Location", "").lower()
+    login_markers = ["login", "signin", "sign-in", "auth", "sso", "logon", "index.html", "error"]
+    return any(m in location for m in login_markers)
+
+
+def _verify_auth(url, auth_class, user, pwd):
+    """
+    Vérifie de façon fiable si les credentials permettent réellement
+    d'accéder à une ressource protégée.
+
+    Stratégie :
+      1. Requête POST au management API (op read-resource) qui exige une vraie auth.
+      2. Confirme via le contenu JSON de réponse.
+    """
+    try:
+        # Requête d'opération management standard qui exige l'authentification
+        payload = {"operation": "read-resource", "address": []}
+        r = requests.post(
+            url,
+            json=payload,
+            auth=auth_class(user, pwd),
+            verify=False,
+            timeout=8,
+            allow_redirects=False,
+            headers={"Content-Type": "application/json"},
+        )
+
+        # 401 => échec d'auth
+        if r.status_code == 401:
+            return False
+
+        # Redirection vers login => NON authentifié (faux positif)
+        if _looks_like_login_redirect(r):
+            return False
+
+        # Succès réel : réponse JSON de management avec "outcome"
+        if r.status_code == 200:
+            try:
+                data = r.json()
+                if isinstance(data, dict) and "outcome" in data:
+                    return True
+            except ValueError:
+                pass
+            # 200 sans JSON valide : on considère non confirmé pour éviter les FP
+            return False
+
+        return False
+
+    except requests.RequestException:
+        return False
 
 
 def test_credentials(host, port, scheme):
     """
-    Teste les credentials par défaut sur l'URL de management de JBoss/WildFly.
+    Teste les credentials par défaut sur l'URL de management de JBoss/WildFly,
+    avec vérification réelle de l'authentification.
     """
     print(f"\n[*] Test de {scheme}://{host}:{port}")
     found = []
 
-    # Détermine le bon endpoint
     base_url = f"{scheme}://{host}:{port}"
-    test_path = None
 
-    # Essaye de trouver l'endpoint management actif
-    for path in MGMT_PATHS:
-        try:
-            r = requests.get(base_url + path, verify=False, timeout=5, allow_redirects=False)
-            if r.status_code in (401, 200, 302):
-                test_path = path
-                if r.status_code == 401:
-                    auth_header = r.headers.get("WWW-Authenticate", "")
-                    print(f"    [+] Endpoint trouvé: {path} (auth: {auth_header.split()[0] if auth_header else 'unknown'})")
-                    break
-        except requests.RequestException:
-            continue
-
-    if not test_path:
-        print(f"    [-] Aucun endpoint management accessible trouvé")
+    # 1) Vérifie que le endpoint management existe et exige une auth
+    mgmt_url = base_url + MGMT_API_ENDPOINT
+    try:
+        r = requests.get(mgmt_url, verify=False, timeout=5, allow_redirects=False)
+        if r.status_code == 401:
+            auth_header = r.headers.get("WWW-Authenticate", "")
+            print(f"    [+] Endpoint management trouvé (auth requise: "
+                  f"{auth_header.split()[0] if auth_header else 'unknown'})")
+        elif r.status_code == 200:
+            # Accessible sans auth => déjà "ouvert" (info)
+            print(f"    [!] Endpoint management accessible SANS authentification (HTTP 200)")
+        else:
+            print(f"    [i] Endpoint management: HTTP {r.status_code}")
+    except requests.RequestException:
+        print(f"    [-] Endpoint management {MGMT_API_ENDPOINT} inaccessible")
         return found
 
-    target_url = base_url + test_path
+    # 2) Établit une baseline : réponse SANS credentials sur l'API
+    #    (pour distinguer un vrai succès d'un comportement par défaut)
+    try:
+        baseline = requests.post(
+            mgmt_url,
+            json={"operation": "read-resource", "address": []},
+            verify=False,
+            timeout=8,
+            allow_redirects=False,
+            headers={"Content-Type": "application/json"},
+        )
+        baseline_ok = False
+        if baseline.status_code == 200:
+            try:
+                if "outcome" in baseline.json():
+                    baseline_ok = True
+            except ValueError:
+                pass
+        if baseline_ok:
+            print(f"    [!!!] Management API accessible SANS credentials !")
+            found.append(("(none)", "(none)", "None"))
+            # On peut s'arrêter ici : pas besoin de brute
+            return found
+    except requests.RequestException:
+        pass
 
+    # 3) Teste chaque credential avec vérification réelle
     for user, pwd in DEFAULT_CREDENTIALS:
         for auth_class in [HTTPDigestAuth, HTTPBasicAuth]:
-            try:
-                r = requests.get(
-                    target_url,
-                    auth=auth_class(user, pwd),
-                    verify=False,
-                    timeout=5,
-                    allow_redirects=False,
-                )
-                if r.status_code in (200, 302, 303):
-                    auth_type = "Digest" if auth_class == HTTPDigestAuth else "Basic"
-                    print(f"    [!!!] SUCCÈS: {user}:{pwd} ({auth_type}) - HTTP {r.status_code}")
-                    found.append((user, pwd, auth_type))
-                    break  # Pas besoin de tester l'autre auth
-            except requests.RequestException:
-                pass
+            if _verify_auth(mgmt_url, auth_class, user, pwd):
+                auth_type = "Digest" if auth_class == HTTPDigestAuth else "Basic"
+                print(f"    [!!!] SUCCÈS CONFIRMÉ: {user}:{pwd} ({auth_type})")
+                found.append((user, pwd, auth_type))
+                break  # inutile de tester l'autre méthode d'auth
 
     if not found:
-        print(f"    [-] Aucun credential par défaut valide")
+        print(f"    [-] Aucun credential par défaut valide (auth vérifiée)")
 
     return found
 
@@ -181,12 +261,12 @@ def test_credentials(host, port, scheme):
 def main():
     parser = argparse.ArgumentParser(
         description="Teste les credentials par défaut sur les services JBoss WildFly "
-                    "(via fichier Nmap, IP/port ou URL)"
+                    "(fichier Nmap, IP/port, ou URL)"
     )
     parser.add_argument("nmap_file", nargs="?", help="Fichier .nmap à analyser")
-    parser.add_argument("-i", "--ip", help="Adresse IP / hostname de la cible")
+    parser.add_argument("-i", "--ip", help="Adresse IP ou hostname de la cible")
     parser.add_argument("-p", "--port", type=int, help="Port de la cible (avec -i)")
-    parser.add_argument("-u", "--url", help="URL de la cible: http://url(:port) ou https://url(:port)")
+    parser.add_argument("-u", "--url", help="URL complète: http://url(:port)")
     parser.add_argument("-o", "--output", help="Fichier de sortie pour les credentials trouvés")
     args = parser.parse_args()
 
@@ -205,7 +285,7 @@ def main():
     # --- Mode IP/Port ---
     elif args.ip:
         port = args.port if args.port else 8080
-        scheme = "https" if port in (8443, 9443, 443) else "http"
+        scheme = "https" if port in (8443, 9443, 443, 9993) else "http"
         targets.append((args.ip, port, scheme))
         print(f"[+] Cible (IP): {scheme}://{args.ip}:{port}")
 
