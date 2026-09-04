@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-    Invoke-WDACAudit - Auditeur WDAC / App Control for Business (CRTO2).
+    Invoke-WDACAudit - Auditeur WDAC 
 
     Parse un ou plusieurs fichiers de politique WDAC (.xml issus de ConvertTo-WDACCodeIntegrityPolicy
     ou de CiPolicy Active), en extrait :
@@ -9,17 +9,6 @@
       * une DIFF technique par technique contre LOLBAS, LOLDrivers et bohops/UltimateWDACBypassList
         indiquant, pour chaque bypass connu, s'il est POSSIBLE ou BLOQUE et s'il faut ETRE ADMIN.
 
-    NOUVEAU (v2) :
-      [A] RESOLVEUR D'EFFET REEL : fusionne chaque base ENFORCEE avec ses politiques
-          supplementaires (par BasePolicyID) et calcule un verdict par binaire tenant compte
-          des versions (Min/MaxFileVersion) et des FilePath allow larges. -> plus de faux POSSIBLE.
-      [C] COUVERTURE BLOCKLIST MICROSOFT : liste les LOLBINs de la blocklist recommandee
-          Microsoft qui MANQUENT dans la politique (finding classique d'audit).
-      [B] SCORE DE POSTURE : note 0-100 + grade A-F + top faiblesses par base effective.
-      [D] CHEMINS WRITABLE : resout %OSDRIVE% etc. et teste les ACL pour dire si un FilePath
-          allow est reellement inscriptible par un utilisateur standard (bypass sans admin).
-      [G] LOLDrivers EN DIRECT : -UpdateLOLDrivers recupere loldrivers.io (cache offline) et
-          croise les hash allow de la politique avec les samples de drivers vulnerables connus.
 
 .USAGE
     .\Invoke-WDACAudit.ps1 -Path .\CIP42.xml
